@@ -1,0 +1,17 @@
+{
+  "name": "transcriptor",
+  "version": "0.0.1",
+  "description": "Waits for an audio file to exist, and transcribes it",
+  "main": "index.js",
+  "dependencies": {
+    "@google-cloud/speech": "^0.11.0",
+    "bunyan": "^1.5.1",
+    "chokidar": "^1.7.0",
+    "circuit-sdk": "^1.2.1900",
+    "commander": "^2.11.0",
+    "file-api": "^0.10.4",
+    "node-ipc": "^9.1.1"
+  },
+  "author": "Walter Martins",
+  "license": "Apache 2.0"
+}
