@@ -17,9 +17,15 @@ const bunyan = require('bunyan');
 
 // Command Processing
 const Commander = require('./commandProcess.js');
+
+// Testing Configuration
+const TestConfig = require('./testingConfiguration.js');
+
+// Audio Transcoding
 const ffmpeg = require('fluent-ffmpeg');  
 const mime = require('mime');  
 
+// Setup Electron
 let debug = /--debug/.test(process.argv[2]);
 let win;
 
@@ -89,53 +95,40 @@ var assert = require('assert');
 var fs = require('fs');
 
 // Circuit SDK
-logger.info('[APP]: get Circuit instance');
+logger.info('[TESTER]: get Circuit instance');
 var Circuit = require('circuit-sdk');
 
-logger.info('[APP]: Circuit set bunyan logger');
+logger.info('[TESTER]: Circuit set bunyan logger');
 Circuit.setLogger(sdkLogger);
 
+// Instantiate Circuit client
 var client = new Circuit.Client({
     client_id: config.bot.client_id,
     client_secret: config.bot.client_secret,
-    domain: config.domain,
+    domain: config.bot.domain,
     scope: 'ALL'
 });
 
+// IPC communication with transcriber process
 const ipc = require('node-ipc');
-
 var socket;
-ipc.config.id = 'circuittestbot';
-ipc.config.retry = 1500;
-//ipc.config.silent = true;
-ipc.serve(function() {
-    ipc.server.on('transcriber-ready', function(message,st) {
-        logger.info(`[ROBOT] Transcriber is ready. ${message}`);
-        socket = st;
-    });
-    ipc.server.on('transcription-available', function(message, st) {
-        logger.info(`[ROBOT]: Transcription Available. ${message}`);
-        robot.buildConversationItem(robot.getLastItemId(), `Transcription Available`, `${message}`)
-        .then(item => client.addTextItem(robot.getConvId(), item));
-});
-});
-
-ipc.server.start();
 
 var Robot = function () {
     var self = this;
     var conversation = null;
     var commander = new Commander(logger);
+    var testConfig = new TestConfig(logger);
     var user = {};
     var lastItemId;
+    var testInterval;
 
     //*********************************************************************
     //* initBot
     //*********************************************************************
     this.initBot = function () {
-        logger.info(`[ROBOT]: initialize robot`);
+        logger.info(`[TESTER]: initialize testing bot`);
         return new Promise(function (resolve, reject) {
-            //Nothing to do for now
+            initIpcServer();
             resolve();
         });
     };
@@ -149,50 +142,26 @@ var Robot = function () {
             self.addEventListeners(client);
             var logon = function () {
                 client.logon().then(logonUser => {
-                    logger.info(`[ROBOT]: Client created and logged as ${logonUser.userId}`);
+                    logger.info(`[TESTER]: Client created and logged as ${logonUser.userId}`);
                     user = logonUser;
                     clearInterval(retry);
                     setTimeout(resolve, 5000);
                 }).catch(error => {
-                    logger.error(`[ROBOT]: Error logging Bot. Error: ${error}`);
+                    logger.error(`[TESTER]: Error logging Bot. Error: ${error}`);
                 });
             }
-            logger.info(`[ROBOT]: Create robot instance with id: ${config.bot.client_id}`);
+            logger.info(`[TESTER]: Create bot instance with id: ${config.bot.client_id}`);
             retry = setInterval(logon, 2000);
         });
     };
 
     //*********************************************************************
-    //* updateUserData
-    //*********************************************************************
-    this.updateUserData = function () {
-        return new Promise(function (resolve, reject) {
-            user.firstName = config.bot.first_name;
-            user.lastName = config.bot.last_name;
-            user.jobTitle = config.bot.job_title;
-            user.company = config.bot.company;
-            logger.info(`[ROBOT]: Update user ${user.userId} data with firstname: ${user.firstName} and lastname: ${user.lastName}`);
-            client.updateUser(user).then(self.setPresence({ state: Circuit.Enums.PresenceState.AVAILABLE })).then(resolve);
-        });
-    }
-
-    //*********************************************************************
     //* addEventListeners
     //*********************************************************************
     this.addEventListeners = function (client) {
-        logger.info(`[ROBOT]: addEventListeners`);
+        logger.info(`[TESTER]: addEventListeners`);
         Circuit.supportedEvents.forEach(function(e) {
-            logger.info(`[ROBOT] add Event listener for ${e}`);
             client.addEventListener(e, self.processEvent)
-        });
-    };
-
-    //*********************************************************************
-    //* setPresence
-    //*********************************************************************
-    this.setPresence = function (presence) {
-        return new Promise(function (resolve, reject) {
-            client.setPresence(presence).then(resolve);
         });
     };
 
@@ -200,8 +169,8 @@ var Robot = function () {
     //* logEvent -- helper
     //*********************************************************************
     this.logEvent = function (evt) {
-        logger.info(`[ROBOT]: ${evt.type} event received`);
-        logger.debug(`[ROBOT]:`, util.inspect(evt, { showHidden: true, depth: null }));
+        logger.info(`[TESTER]: ${evt.type} event received`);
+        logger.debug(`[TESTER]:`, util.inspect(evt, { showHidden: true, depth: null }));
     };
 
     //*********************************************************************
@@ -212,24 +181,24 @@ var Robot = function () {
             if (config.convId) {
                 client.getConversationById(config.convId)
                     .then(conv => {
-                        logger.info(`[ROBOT]: checkIfConversationExists`);
+                        logger.info(`[TESTER]: checkIfConversationExists`);
                         if (conv) {
-                            logger.info(`[ROBOT]: conversation ${conv.convId} exists`);
+                            logger.info(`[TESTER]: conversation ${conv.convId} exists`);
                             resolve(conv);
                         } else {
-                            logger.info(`[ROBOT]: conversation with id ${conv.convId} does not exist`);
+                            logger.info(`[TESTER]: conversation with id ${conv.convId} does not exist`);
                             reject(`conversation with id ${conv.convId} does not exist`);
                         }
                     });
             } else {
                 client.getDirectConversationWithUser(config.botOwnerEmail)
                     .then(conv => {
-                        logger.info(`[ROBOT]: checkIfConversationExists`);
+                        logger.info(`[TESTER]: checkIfConversationExists`);
                         if (conv) {
-                            logger.info(`[ROBOT]: conversation ${conv.convId} exists`);
+                            logger.info(`[TESTER]: conversation ${conv.convId} exists`);
                             resolve(conv);
                         } else {
-                            logger.info(`[ROBOT]: conversation does not exist, create new conversation`);
+                            logger.info(`[TESTER]: conversation does not exist, create new conversation`);
                             return client.createDirectConversation(config.botOwnerEmail);
                         }
                     });
@@ -242,10 +211,10 @@ var Robot = function () {
     //*********************************************************************
     this.sayHi = function (evt) {
         return new Promise(function (resolve, reject) {
-            logger.info(`[ROBOT]: say hi`);
+            logger.info(`[TESTER]: say hi`);
             self.getConversation()
                 .then(conv => {
-                    logger.info(`[ROBOT]: send conversation item`);
+                    logger.info(`[TESTER]: send conversation item`);
                     conversation = conv;
                     resolve();
                     return self.buildConversationItem(null, `Hi from ${config.bot.nick_name}`,
@@ -269,7 +238,7 @@ var Robot = function () {
                 attachments: attach
             };
             resolve(item);
-        })
+        });
     };
 
     //*********************************************************************
@@ -277,7 +246,7 @@ var Robot = function () {
     //*********************************************************************
     this.terminate = function (err) {
         var error = new Error(err);
-        logger.error(`[ROBOT]: Robot failed ${error.message}`);
+        logger.error(`[TESTER]: bot failed ${error.message}`);
         logger.error(error.stack);
         process.exit(1);
     };
@@ -297,20 +266,10 @@ var Robot = function () {
             case 'callStatus':
                 self.processCallStatusEvent(evt);
                 break;
-            case 'userUpdated':
-                self.processUserUpdatedEvent(evt);
-                break;
             default:
-                logger.info(`[ROBOT]: unhandled event ${evt.type}`);
+                logger.info(`[TESTER]: unhandled event ${evt.type}`);
                 break;
         }
-    };
-
-    //*********************************************************************
-    //* processUserUpdatedEvent
-    //*********************************************************************
-    this.processUserUpdatedEvent = function (evt) {
-        user = evt.user;
     };
 
     //*********************************************************************
@@ -318,7 +277,7 @@ var Robot = function () {
     //*********************************************************************
     this.processItemAddedEvent = function (evt) {
         if (evt.item.text && evt.item.creatorId !== user.userId) {
-            logger.info(`[ROBOT] Recieved itemAdded event with itemId [${evt.item.itemId}] and content [${evt.item.text.content}]`);
+            logger.info(`[TESTER] Recieved itemAdded event with itemId [${evt.item.itemId}] and content [${evt.item.text.content}]`);
             self.processCommand(evt.item.convId, evt.item.parentItemId || evt.item.itemId, evt.item.text.content);
         }
     };
@@ -330,7 +289,7 @@ var Robot = function () {
         if (evt.item.text && evt.item.creatorId !== user.userId) {
             if (evt.item.text.content) {
                 var lastPart = evt.item.text.content.split('<hr/>').pop();
-                logger.info(`[ROBOT] Recieved itemUpdated event with: ${lastPart}`);
+                logger.info(`[TESTER] Recieved itemUpdated event with: ${lastPart}`);
                 self.processCommand(evt.item.parentItemId || evt.item.itemId, lastPart);
             }
         }
@@ -340,11 +299,7 @@ var Robot = function () {
     //* processCallStatusEvent
     //*********************************************************************
     this.processCallStatusEvent = function (evt) {
-        logger.info(`[ROBOT]: Received callStatus event with call state ${evt.call.state}`);
-        if (evt.call.reason === `sdpConnected`) {
-            logger.info(`[ROBOT] SDP Connected. Start Recording`);
-            this.startRecording(call);
-        }
+        logger.info(`[TESTER]: Received callStatus event with call state ${evt.call.state}`);
     };
 
     //*********************************************************************
@@ -358,12 +313,12 @@ var Robot = function () {
     //* processCommand
     //*********************************************************************
     this.processCommand = function (convId, itemId, command) {
-        logger.info(`[ROBOT] Processing command: [${command}]`);
+        logger.info(`[TESTER] Processing command: [${command}]`);
         if (self.isItForMe(command)) {
             var withoutName = command.substr(command.indexOf('</span> ') + 8);
-            logger.info(`[ROBOT] Command is for me. Processing [${withoutName}]`);
+            logger.info(`[TESTER] Command is for me. Processing [${withoutName}]`);
             commander.processCommand(withoutName, function (reply, params) {
-                logger.info(`[ROBOT] Interpreting command to ${reply} with parms ${JSON.stringify(params)}`);
+                logger.info(`[TESTER] Interpreting command to ${reply} with parms ${JSON.stringify(params)}`);
                 switch (reply) {
                     case 'status':
                         self.reportStatus(convId, itemId);
@@ -374,20 +329,26 @@ var Robot = function () {
                     case 'showHelp':
                         self.showHelp(convId, itemId);
                         break;
-                    case 'startStream':
-                        self.stream(convId, `start`);
-                        break;
-                    case 'stopStream':
-                        self.stream(convId, `stop`);
-                        break;
                     case 'dial':
                         self.dial(convId, itemId, params);
+                        break;
+                    case 'startConfTest':
+                        self.startConfTest(convId, itemId);
+                        break;
+                    case 'stopConfTest':
+                        self.stopConfTest(convId, itemId);
+                        break;
+                    case 'setConfConf':
+                        self.setTesterConfiguration(convId, itemId, params);
+                        break;
+                    case 'showConfConf':
+                        self.showTesterConfiguration(convId, itemId);
                         break;
                     case 'shutdown':
                         self.shutdown();
                         break;
                     default:
-                        logger.info(`[ROBOT] I do not understand [${withoutName}]`);
+                        logger.info(`[TESTER] I do not understand [${withoutName}]`);
                         self.buildConversationItem(itemId, null,
                             `I do not understand <b>[${withoutName}]</b>`).
                             then(item => client.addTextItem(convId || conversation.convId, item));
@@ -395,7 +356,7 @@ var Robot = function () {
                 }
             });
         } else {
-            logger.info(`[ROBOT] Ignoring command: it is not for me`);
+            logger.info(`[TESTER] Ignoring command: it is not for me`);
         }
     };
 
@@ -421,7 +382,7 @@ var Robot = function () {
     //* showHelp
     //*********************************************************************
     this.showHelp = function (convId, itemId) {
-        logger.info(`[ROBOT] Displaying help...`);
+        logger.info(`[TESTER] Displaying help...`);
         commander.buildHelp().then(help => self.buildConversationItem(itemId, 'HELP', help)
             .then(item => client.addTextItem(convId || conversation.convId, item)));
     };
@@ -431,50 +392,189 @@ var Robot = function () {
     //*********************************************************************
     this.dial = function (convId, itemId, params) {
         if (!params || !params.length) {
-            logger.error(`[ROBOT] No number to dial`);
+            logger.error(`[TESTER] No number to dial`);
             self.buildConversationItem(itemId, `ERROR`, "Unable to dial. Number missing")
             .then(item => client.addTextItem(convId || conversation.convId, item));
         } else {
-            logger.info(`[ROBOT] Sending dial message to renderer`);
-            win.webContents.send("dial", params && params.join());
-            self.buildConversationItem(itemId, `Dialing`, `Dialing ${params.join()}`)
-            .then(item => client.addTextItem(convId || conversation.convId, item));
-            lastItemId = itemId;
+            logger.info(`[TESTER] Sending dial message to renderer`);
+            var bridge = {
+                bridgeNumber: params[0],
+                locale: (params.length > 2 ? params[2] : 'EN_US')
+            }
+            if (params.length > 1) {
+                bridge.pin = params[1];
+            }
+            self.dialBridge(convId, itemId, bridge);
         }
     }
 
-    this.startRecording = async function(call) {
-        logger.info(`[ROBOT] Sending startRecording to renderer`);
-        win.webContents.send("startRecording", call);
-    }
+    this.dialBridge = function(convId, itemId, bridge) {
+        logger.info(`[TESTER] Dial Bridge with number ${bridge.bridgeNumber} and locale ${bridge.locale}`);
+        logger.info(`[TESTER] Keep Testing after this? ${testConfig.keepTesting()}`);
+        win.webContents.send("dialBridge", bridge);
+        self.buildConversationItem(itemId, `Dialing Bridge`, `Dialing ${bridge.bridgeNumber}` + ` ${bridge.pin ? bridge.pin : ''}` + ` with locale ${bridge.locale}`)
+        .then(item => client.addTextItem(convId || conversation.convId, item));
+        lastItemId = itemId;
+}
 
+    //*********************************************************************
+    //* terminate bot
+    //*********************************************************************
     this.shutdown = function (reason) {
-        logger.warn(`[ROBOT] Shutting down. Reason: ${reason}`);
+        logger.warn(`[TESTER] Shutting down. Reason: ${reason}`);
         client.logout();
         throw new Error('Terminated by user');
     }
 
+    //*********************************************************************
+    //* returns last conversation item id
+    //*********************************************************************
     this.getLastItemId = function () {
         return lastItemId;
     }
 
+    //*********************************************************************
+    //* returns conversation id
+    //*********************************************************************
     this.getConvId = function () {
         return conversation.convId;
     }
+
+    this.setTesterConfiguration = function(convId, itemId, params) {
+        var err;
+        if (!params || params.length === 0) {
+            err = 'Parameters are not provided. Use help';
+            self.sendErrorItem(err => self.sendErrorItem(convId, itemId, err));
+        } else if (params.length === 3) {
+            var config = {
+                mode: params[0],
+                times: params[1],
+                timeBetweenTests: params[2]
+            };
+            testConfig.setConfig(config).then(function() {
+                self.showTesterConfiguration(convId, itemId)
+            }).catch(err => self.sendErrorItem(convId, itemId, err));
+        } else if (params.length === 2) {
+            testConfig.setConfigurationMode(params[0]).then(testConfig.setConfigurationTimes(params[1]).
+            then(function() {
+                self.showTesterConfiguration(convId, itemId)})).catch(err => self.sendErrorItem(convId, itemId, err));
+        } else {
+            testConfing.setConfigurationMode(params[0]).then(function () {
+                self.showTesterConfiguration(convId, itemId)}).catch(err => self.sendErrorItem(convId, itemId, err));
+        }
+    }
+
+    this.showTesterConfiguration = function(convId, itemId) {
+        testConfig.getConfiguration().then(config => self.buildConversationItem(itemId,
+        'Testing Configuration', `Mode: ${config.mode}\nTimes: ${config.times} \nTime Between Tests(ms): ${config.timeBetweenTests}`)).
+        then(item => client.addTextItem(convId, item));
+    }
+
+    this.startConfTest = function(convId, itemId) {
+        function test() {
+            testConfig.getNextBridge()
+            .then(bridge => self.dialBridge(convId, itemId, bridge))
+            .catch(err => function(err) {
+                self.sendErrorItem(convId, itemId, err);
+            });
+            if (!testInterval && testConfig.keepTesting()) {
+                testInterval = setInterval(test, testConfig.getConfigurationTimeBetweenTests());
+            }
+            if (testInterval && !testConfig.keepTesting()) {
+                clearInterval(testInterval);
+                testInterval = undefined;
+            }
+        }
+        client.changeConversationPin(convId)
+        .then(self.getConferenceBridges)
+        .then(self.setConferenceBridgesForTesting)
+        .then(test)
+        .catch(err => self.sendErrorItem(convId, itemId, err));
+    }
+
+    this.getConferenceBridges = function(confDetails) {
+        logger.info(`[TESTER] Get Conference Bridges}`);
+        return new Promise(function (resolve, reject) {
+            var conferenceBridges = [];
+            var pin = confDetails.pin;
+            logger.info(`[TESTER] Conference Details: `);
+            logger.info(`[TESTER] Pin: ${pin}`);
+            if (confDetails.bridgeNumbers.length === 0) {
+                resolve([]);
+            }
+            confDetails.bridgeNumbers.forEach(function (bridgeNumber, i) {
+                logger.info(`[TESTER] Bridge Number: ${bridgeNumber.bridgeNumber}`);
+                logger.info(`[TESTER] Locale: ${bridgeNumber.locale}`);
+                conferenceBridges.push({
+                    bridgeNumber: bridgeNumber.bridgeNumber,
+                    locale: bridgeNumber.locale,
+                    pin: pin+'#'
+                });
+            });
+            resolve(conferenceBridges);
+        });
+    }
+
+    this.setConferenceBridgesForTesting = function(conferenceBridges) {
+        logger.info(`[TESTER] Set Conference Bridges for Testing`);
+        return new Promise(function(resolve, reject) {
+            conferenceBridges.forEach(function(confBridge) {
+                // Only English US bridges for now
+                if (confBridge.locale === 'EN_US') {
+                    testConfig.addBridge({
+                        bridgeNumber: confBridge.bridgeNumber,
+                        locale: confBridge.locale,
+                        pin: confBridge.pin
+                    });
+                }
+            });
+            resolve();
+        });
+    }
+
+    this.stopConfTest = function(convId, itemId) {
+        clearInterval(testInterval);
+        testInterval = undefined;
+        self.buildConversationItem(itemId, 'TESTING', 'Test will stop after current test is finished')
+        .then(item => client.addTextItem(convId, item));
+    }
+
+    this.sendErrorItem = function sendErrorItem(convId, itemId, err) {
+        self.buildConversationItem(itemId, 'ERROR', err).then(item => client.addTextItem(convId, item));
+    }
 }
 
+
 ipcMain.on("recordingReady", function(sender, params) {
-    logger.info(`[ROBOT] Recording is ready for transcoding`);
+    logger.info(`[TESTER] Recording is ready for transcoding`);
     // Transcode file for google speech transcription
     transcode(config.ogg_file, config.raw_file).then(function() {
-        logger.info(`[ROBOT] Transcoding complete`);
+        logger.info(`[TESTER] Transcoding complete`);
         if (!socket) {
-            logger.warn(`[ROBOT] Transcriber is not ready to perform this transcription`);
+            logger.warn(`[TESTER] Transcriber is not ready to perform this transcription`);
             return;
         }
         ipc.server.emit(socket, 'audio-file-ready', config.raw_file);
     }).catch(e => logger.error(e)); 
 });
+
+function initIpcServer() {
+    ipc.config.id = 'circuittestbot';
+    ipc.config.retry = 1500;
+    ipc.config.silent = true;
+    ipc.serve(function() {
+        ipc.server.on('transcriber-ready', function(message,st) {
+            logger.info(`[TESTER] Transcriber is ready. ${message}`);
+            socket = st;
+        });
+        ipc.server.on('transcription-available', function(message, st) {
+            logger.info(`[TESTER]: Transcription Available. ${message}`);
+            robot.buildConversationItem(robot.getLastItemId(), `Transcription Available`, `${message}`)
+            .then(item => client.addTextItem(robot.getConvId(), item));
+        });
+    });
+    ipc.server.start();
+}
 
 // /opt/ffmpeg/ffmpeg -acodec opus -i test.raw -f s16le -acodec pcm_s16le -ar 16000 output.raw
 function transcode(fileIn, fileOut) {

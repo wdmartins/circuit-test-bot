@@ -3,16 +3,24 @@
         "description": "Displays the available commands",
         "command": "showHelp"
     },
-    "stream": {
-        "description": "Show live feed",
+    "conference": {
+        "description": "Conference Testing",
         "submenu" : {
             "start": {
-                "description": "Starts streaming live video. (Starts or Joins Conference)",
-                "command": "startStream"
+                "description": "Starts conference testing",
+                "command": "startConfTest"
             },
             "stop": {
-                "description": "Stops streaming live video. (Leaves or Terminates Conference)",
-                "command": "stopStream"
+                "description": "Stops Conference Testing",
+                "command": "stopConfTest"
+            },
+            "setConfig": {
+                "description": "Configures conference testing. Use `conference conf [ENGLISH|ALL] [ONCE|ENDLESS] [time_between_tests_in_ms]. Defaults: Endless, English, 60000",
+                "command": "setConfConf"
+            },
+            "showConfig": {
+                "description": "Shows current conference testing configuration.",
+                "command": "showConfConf"
             },
             "end": true
         },
@@ -27,7 +35,7 @@
         "command": "version"
     },
     "dial": {
-        "description": "Uses Circuit SDK to dial a phone number. Use dial [phoneNumber]",
+        "description": "Dials a phone number. Use dial [phoneNumber] [pin] [locale (Def: EN_US)]",
         "command": "dial"
     },
     "shutdown": {

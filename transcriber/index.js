@@ -8,9 +8,6 @@ var FileAPI = require('file-api');
 var File = FileAPI.File;
 const path = require('path');
 
-// Google Cloud Platform project info
-//const configGoogleAPI = require('./circuit-rec-bot-11cbd8fce10b.json');
-
 // Load configuration
 var config = require('./config.json');
 
@@ -32,43 +29,6 @@ var logger = bunyan.createLogger({
 // IPC Communication
 var ipc=require('node-ipc');
  
-ipc.config.id   = 'trancriber';
-ipc.config.retry= 1500;
-
-ipc.connectTo(
-    'circuittestbot',
-    function(){
-        ipc.of.circuittestbot.on(
-            'connect',
-            function(){
-                ipc.log('## connected to circuittestbot ##'.rainbow, ipc.config.delay);
-                ipc.of.circuittestbot.emit(
-                    'transcriber-ready'
-                )
-            }
-        );
-        ipc.of.circuittestbot.on(
-            'disconnect',
-            function(){
-                ipc.log('disconnected from circuittestbot'.notice);
-            }
-        );
-        ipc.of.circuittestbot.on(
-            'audio-file-ready',
-            function(data){
-                ipc.log('got a message from circuittestbot : '.debug, data);
-                var text= transcriber.processNewFile(data).then(text => {
-                    logger.info(`Transcribed text: ${text}`);
-                    ipc.of.circuittestbot.emit(
-                        'transcription-available',
-                        text
-                    )
-                });
-            }
-        );
-    }
-);
-
 var Transcriber = function () {
     var self = this;
     var watcher;
@@ -79,6 +39,7 @@ var Transcriber = function () {
     this.init = function() {
         logger.info(`[APP]: initialize transcriber`);
         return new Promise(function(resolve, reject) {
+            initIpcClient();
             resolve();
         });
     };
@@ -146,6 +107,45 @@ var Transcriber = function () {
     };
 }
 
+function initIpcClient() {
+    ipc.config.id   = 'trancriber';
+    ipc.config.retry= 1500;
+    ipc.config.silent = true;
+    
+    ipc.connectTo(
+        'circuittestbot',
+        function(){
+            ipc.of.circuittestbot.on(
+                'connect',
+                function(){
+                    ipc.log('## connected to circuittestbot ##'.rainbow, ipc.config.delay);
+                    ipc.of.circuittestbot.emit(
+                        'transcriber-ready'
+                    )
+                }
+            );
+            ipc.of.circuittestbot.on(
+                'disconnect',
+                function(){
+                    ipc.log('disconnected from circuittestbot'.notice);
+                }
+            );
+            ipc.of.circuittestbot.on(
+                'audio-file-ready',
+                function(data){
+                    ipc.log('got a message from circuittestbot : '.debug, data);
+                    var text= transcriber.processNewFile(data).then(text => {
+                        logger.info(`Transcribed text: ${text}`);
+                        ipc.of.circuittestbot.emit(
+                            'transcription-available',
+                            text
+                        )
+                    });
+                }
+            );
+        }
+    );
+}
 //*********************************************************************
 //* main
 //*********************************************************************
