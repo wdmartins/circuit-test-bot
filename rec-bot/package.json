@@ -16,7 +16,8 @@
     "electron": "^1.8.1",
     "file-api": "^0.10.4",
     "fluent-ffmpeg": "^2.1.2",
-    "node-ipc": "^9.1.1"
+    "node-ipc": "^9.1.1",
+    "similarity": "^1.1.1"
   },
   "author": "Walter Martins",
   "license": "Apache 2.0",

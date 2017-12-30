@@ -109,9 +109,13 @@ var client = new Circuit.Client({
     scope: 'ALL'
 });
 
+// String similarity
+var Similarity = require('./similarity.js');
+
 // IPC communication with transcriber process
 const ipc = require('node-ipc');
 var socket;
+var similarity = new Similarity(logger);
 
 var Robot = function () {
     var self = this;
@@ -411,7 +415,7 @@ var Robot = function () {
     this.dialBridge = function(convId, itemId, bridge) {
         logger.info(`[TESTER] Dial Bridge with number ${bridge.bridgeNumber} and locale ${bridge.locale}`);
         logger.info(`[TESTER] Keep Testing after this? ${testConfig.keepTesting()}`);
-        win.webContents.send("dialBridge", bridge);
+        win.webContents.send('dialBridge', bridge);
         self.buildConversationItem(itemId, `Dialing Bridge`, `Dialing ${bridge.bridgeNumber}` + ` ${bridge.pin ? bridge.pin : ''}` + ` with locale ${bridge.locale}`)
         .then(item => client.addTextItem(convId || conversation.convId, item));
         lastItemId = itemId;
@@ -569,7 +573,8 @@ function initIpcServer() {
         });
         ipc.server.on('transcription-available', function(message, st) {
             logger.info(`[TESTER]: Transcription Available. ${message}`);
-            robot.buildConversationItem(robot.getLastItemId(), `Transcription Available`, `${message}`)
+            var simil = similarity.getSimilarity(message).toFixed(4);
+            robot.buildConversationItem(robot.getLastItemId(), `Transcription Available: similarity= ${simil * 100}%`, `${message}`)
             .then(item => client.addTextItem(robot.getConvId(), item));
         });
     });
