@@ -4,7 +4,8 @@
 var similarity = require('similarity');
 
 const MASTER_STRINGS_DEF = {
-    'en-US': 'welcome to Circuit please enter the conference pin and push pound to confirm\n connecting to the conference'
+    'en-US': 'welcome to Circuit please enter the conference pin and push pound to confirm\n connecting to the conference',
+    'de-DE': 'Willkommen bei Circuit Bitte geben Sie den Konferenz-Pin ein und drücken Sie zur Bestätigung auf die Taste\n um eine Verbindung zur Konferenz herzustellen'
 }
 
 var StringSimilarity = function(logger) {
