@@ -127,6 +127,7 @@ var TestingConfiguration = function(log) {
     }
 
     this.getNextBridge = function() {
+        logger.info('[TESTCONF] getNextBridge');
         return new Promise(function (resolve, reject) {
             if (!config.bridges || config.bridges.length === 0) {
                 reject("There are no bridges configured");

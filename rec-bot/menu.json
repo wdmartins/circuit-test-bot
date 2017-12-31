@@ -7,12 +7,16 @@
         "description": "Conference Testing",
         "submenu" : {
             "start": {
-                "description": "Starts conference testing",
+                "description": "Starts or Restarts conference testing. It will retrieve conversation details",
                 "command": "startConfTest"
             },
             "stop": {
-                "description": "Stops Conference Testing",
+                "description": "Stops or Pauses Conference Testing",
                 "command": "stopConfTest"
+            },
+            "resume": {
+                "description": "Resumes Conference Testing. It does not retrieve conversation details",
+                "command": "resumeConfTest"
             },
             "setConfig": {
                 "description": "Configures conference testing. Use `conference conf [ENGLISH|ALL] [ONCE|ENDLESS] [time_between_tests_in_ms]. Defaults: Endless, English, 60000",

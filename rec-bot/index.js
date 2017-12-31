@@ -1,8 +1,5 @@
 'use strict';
 
-// Electron
-const ElectronHelper = require('./electron.js');
-
 // Load configuration
 const config = require('./config.json');
 const packjson = require('./package.json');
@@ -36,7 +33,8 @@ var logger = bunyan.createLogger({
     level: 'info'
 });
 
-// Setup Electron
+// Electron
+const ElectronHelper = require('./electron.js');
 let debug = /--debug/.test(process.argv[2]);
 var electronHelper = new ElectronHelper(logger, debug);
 
@@ -66,17 +64,17 @@ var Similarity = require('./similarity.js');
 var RecUtils = require('./utils.js');
 
 var Robot = function () {
-    var self = this;
-    var conversation = null;
-    var commander = new Commander(logger);
-    var testConfig = new TestConfig(logger);
-    var recUtils = new RecUtils(logger);
-    var similarity = new Similarity(logger);
-    var transcriber;
-    var user = {};
-    var lastItemId;
-    var testInterval;
-    var currentBridge;
+    let self = this;
+    let conversation = null;
+    let commander = new Commander(logger);
+    let testConfig = new TestConfig(logger);
+    let recUtils = new RecUtils(logger);
+    let similarity = new Similarity(logger);
+    let transcriber;
+    let user = {};
+    let lastItemId;
+    let testInterval;
+    let currentBridge;
 
     //*********************************************************************
     //* initBot
@@ -95,9 +93,9 @@ var Robot = function () {
     //*********************************************************************
     this.logonBot = function () {
         return new Promise(function(resolve, reject) {
-            var retry;
+            let retry;
             self.addEventListeners(client);
-            var logon = function () {
+            let logon = function () {
                 client.logon().then(logonUser => {
                     logger.info(`[TESTER]: Client created and logged as ${logonUser.userId}`);
                     user = logonUser;
@@ -186,8 +184,8 @@ var Robot = function () {
     //*********************************************************************
     this.buildConversationItem = function (parentId, subject, content, attachments) {
         return new Promise(function (resolve, reject) {
-            var attach = attachments && [attachments];
-            var item = {
+            let attach = attachments && [attachments];
+            let item = {
                 parentId: parentId,
                 subject: subject,
                 content: content,
@@ -245,7 +243,7 @@ var Robot = function () {
     this.processItemUpdatedEvent = function (evt) {
         if (evt.item.text && evt.item.creatorId !== user.userId) {
             if (evt.item.text.content) {
-                var lastPart = evt.item.text.content.split('<hr/>').pop();
+                let lastPart = evt.item.text.content.split('<hr/>').pop();
                 logger.info(`[TESTER] Recieved itemUpdated event with: ${lastPart}`);
                 self.processCommand(evt.item.parentItemId || evt.item.itemId, lastPart);
             }
@@ -272,7 +270,7 @@ var Robot = function () {
     this.processCommand = function (convId, itemId, command) {
         logger.info(`[TESTER] Processing command: [${command}]`);
         if (self.isItForMe(command)) {
-            var withoutName = command.substr(command.indexOf('</span> ') + 8);
+            let withoutName = command.substr(command.indexOf('</span> ') + 8);
             logger.info(`[TESTER] Command is for me. Processing [${withoutName}]`);
             commander.processCommand(withoutName, function (reply, params) {
                 logger.info(`[TESTER] Interpreting command to ${reply} with parms ${JSON.stringify(params)}`);
@@ -294,6 +292,9 @@ var Robot = function () {
                         break;
                     case 'stopConfTest':
                         self.stopConfTest(convId, itemId);
+                        break;
+                    case 'resumeConfTest':
+                        self.resumeConfTest(convId, itemId);
                         break;
                     case 'setConfConf':
                         self.setTesterConfiguration(convId, itemId, params);
@@ -405,12 +406,12 @@ var Robot = function () {
     //* Set the test parameters
     //*********************************************************************
     this.setTesterConfiguration = function(convId, itemId, params) {
-        var err;
+        let err;
         if (!params || params.length === 0) {
             err = 'Parameters are not provided. Use help';
             self.sendErrorItem(err => self.sendErrorItem(convId, itemId, err));
         } else if (params.length === 3) {
-            var config = {
+            let config = {
                 mode: params[0],
                 times: params[1],
                 timeBetweenTests: params[2]
@@ -468,8 +469,8 @@ var Robot = function () {
     this.getConferenceBridges = function(confDetails) {
         logger.info(`[TESTER] Get Conference Bridges`);
         return new Promise(function (resolve, reject) {
-            var conferenceBridges = [];
-            var pin = confDetails.pin;
+            let conferenceBridges = [];
+            let pin = confDetails.pin;
             logger.info(`[TESTER] Conference Details: `);
             logger.info(`[TESTER] Pin: ${pin}`);
             if (confDetails.bridgeNumbers.length === 0) {
