@@ -24,6 +24,9 @@ const TestConfig = require('./testingConfiguration.js');
 // Audio Transcoding
 const transcoder = require('./transcoder.js');
 
+// Audio Transcribing
+const Transcriber = require('./transcriber.js');
+
 // Setup Electron
 let debug = /--debug/.test(process.argv[2]);
 let win;
@@ -111,21 +114,18 @@ var Similarity = require('./similarity.js');
 // Utils
 var RecUtils = require('./utils.js');
 
-// IPC communication with transcriber process
-const ipc = require('node-ipc');
-var socket;
-var similarity = new Similarity(logger);
-var currentBridge;
-
 var Robot = function () {
     var self = this;
     var conversation = null;
     var commander = new Commander(logger);
     var testConfig = new TestConfig(logger);
     var recUtils = new RecUtils(logger);
+    var similarity = new Similarity(logger);
+    var transcriber;
     var user = {};
     var lastItemId;
     var testInterval;
+    var currentBridge;
 
     //*********************************************************************
     //* initBot
@@ -133,7 +133,7 @@ var Robot = function () {
     this.initBot = function () {
         logger.info(`[TESTER]: initialize testing bot`);
         return new Promise(function (resolve, reject) {
-            initIpcServer();
+            transcriber = new Transcriber(logger, self.onTranscriptionReady);
             resolve();
         });
     };
@@ -566,48 +566,42 @@ var Robot = function () {
     //*********************************************************************
     //* Show an error as a conversation item
     //*********************************************************************
-    this.sendErrorItem = function sendErrorItem(convId, itemId, err) {
+    this.sendErrorItem = function (convId, itemId, err) {
         self.buildConversationItem(itemId, 'ERROR', err).then(item => client.addTextItem(convId, item));
     }
-}
 
+    //*********************************************************************
+    //* onRecordingReady
+    //*********************************************************************
+    this.onRecordingReady = function () {
+        logger.info(`[TESTER] Recording is ready for transcoding`);
+        // Transcode file for google speech transcription
+        transcoder.transcode(config.ogg_file, config.raw_file).then(function() {
+            logger.info(`[TESTER] Transcoding complete`);
+            transcriber.transcribe({locale: currentBridge.locale, file: config.raw_file});
+        }).catch(e => logger.error(e)); 
+    }
 
-ipcMain.on("recordingReady", function(sender, params) {
-    logger.info(`[TESTER] Recording is ready for transcoding`);
-    // Transcode file for google speech transcription
-    transcoder.transcode(config.ogg_file, config.raw_file).then(function() {
-        logger.info(`[TESTER] Transcoding complete`);
-        if (!socket) {
-            logger.warn(`[TESTER] Transcriber is not ready to perform this transcription`);
+    //*********************************************************************
+    //* onTranscriptionReady
+    //*********************************************************************
+    this.onTranscriptionReady = function (message, err) {
+        if (!message) {
+            self.sendErrorItem(convId, lastItemId, err);
             return;
         }
-        ipc.server.emit(socket, 'audio-file-ready', {locale: currentBridge.locale, file: config.raw_file});
-    }).catch(e => logger.error(e)); 
-});
-
-function initIpcServer() {
-    ipc.config.id = 'circuittestbot';
-    ipc.config.retry = 1500;
-    ipc.config.silent = true;
-    ipc.serve(function() {
-        ipc.server.on('transcriber-ready', function(message,st) {
-            logger.info(`[TESTER] Transcriber is ready. ${message}`);
-            socket = st;
-        });
-        ipc.server.on('transcription-available', function(message, st) {
-            logger.info(`[TESTER]: Transcription Available. ${message}`);
-            similarity.getSimilarityByLocale(message, currentBridge.locale).then(simil =>
-            robot.buildConversationItem(robot.getLastItemId(), `Transcription Available: similarity= ${simil.toFixed(4) * 100}%`, `${message}`)
-            .then(item => client.addTextItem(robot.getConvId(), item)));
-        });
-    });
-    ipc.server.start();
+        logger.info(`[TESTER]: Transcription Available. ${message}`);
+        similarity.getSimilarityByLocale(message, currentBridge.locale).then(simil =>
+        robot.buildConversationItem(robot.getLastItemId(), `Transcription Available: similarity= ${simil.toFixed(4) * 100}%`, `${message}`)
+        .then(item => client.addTextItem(robot.getConvId(), item)));
+    }
 }
 
 //*********************************************************************
 //* main
 //*********************************************************************
 var robot = new Robot();
+ipcMain.on("recordingReady", robot.onRecordingReady);
 robot.initBot()
     .then(robot.logonBot)
     .then(robot.sayHi)
