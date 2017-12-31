@@ -22,8 +22,7 @@ const Commander = require('./commandProcess.js');
 const TestConfig = require('./testingConfiguration.js');
 
 // Audio Transcoding
-const ffmpeg = require('fluent-ffmpeg');  
-const mime = require('mime');  
+const transcoder = require('./transcoder.js');
 
 // Setup Electron
 let debug = /--debug/.test(process.argv[2]);
@@ -90,9 +89,6 @@ var logger = bunyan.createLogger({
 // Node utils
 var util = require('util');
 var assert = require('assert');
-
-// File system
-var fs = require('fs');
 
 // Circuit SDK
 logger.info('[TESTER]: get Circuit instance');
@@ -417,6 +413,9 @@ var Robot = function () {
         }
     }
 
+    //*********************************************************************
+    //* dial a conference bridge
+    //*********************************************************************
     this.dialBridge = function(convId, itemId, bridge) {
         logger.info(`[TESTER] Dial Bridge with number ${bridge.bridgeNumber} and locale ${bridge.locale}`);
         logger.info(`[TESTER] Keep Testing after this? ${testConfig.keepTesting()}`);
@@ -425,7 +424,7 @@ var Robot = function () {
         .then(item => client.addTextItem(convId || conversation.convId, item));
         lastItemId = itemId;
         currentBridge = bridge;
-}
+    }
 
     //*********************************************************************
     //* terminate bot
@@ -450,6 +449,9 @@ var Robot = function () {
         return conversation.convId;
     }
 
+    //*********************************************************************
+    //* Set the test parameters
+    //*********************************************************************
     this.setTesterConfiguration = function(convId, itemId, params) {
         var err;
         if (!params || params.length === 0) {
@@ -474,12 +476,18 @@ var Robot = function () {
         }
     }
 
+    //*********************************************************************
+    //* Show the test parameters
+    //*********************************************************************
     this.showTesterConfiguration = function(convId, itemId) {
         testConfig.getConfiguration().then(config => self.buildConversationItem(itemId,
         'Testing Configuration', `Mode: ${config.mode}\nTimes: ${config.times} \nTime Between Tests(ms): ${config.timeBetweenTests}`)).
         then(item => client.addTextItem(convId, item));
     }
 
+    //*********************************************************************
+    //* Start conference bridge testing
+    //*********************************************************************
     this.startConfTest = function(convId, itemId) {
         function test() {
             testConfig.getNextBridge()
@@ -502,6 +510,9 @@ var Robot = function () {
         .catch(err => self.sendErrorItem(convId, itemId, err));
     }
 
+    //*********************************************************************
+    //* Get conference bridges
+    //*********************************************************************
     this.getConferenceBridges = function(confDetails) {
         logger.info(`[TESTER] Get Conference Bridges`);
         return new Promise(function (resolve, reject) {
@@ -525,6 +536,9 @@ var Robot = function () {
         });
     }
 
+    //*********************************************************************
+    //* Set conference bridges for testing
+    //*********************************************************************
     this.setConferenceBridgesForTesting = function(conferenceBridges) {
         logger.info(`[TESTER] Set Conference Bridges for Testing`);
         return new Promise(function(resolve, reject) {
@@ -539,6 +553,9 @@ var Robot = function () {
         });
     }
 
+    //*********************************************************************
+    //* Stop conference bridge testing
+    //*********************************************************************
     this.stopConfTest = function(convId, itemId) {
         clearInterval(testInterval);
         testInterval = undefined;
@@ -546,6 +563,9 @@ var Robot = function () {
         .then(item => client.addTextItem(convId, item));
     }
 
+    //*********************************************************************
+    //* Show an error as a conversation item
+    //*********************************************************************
     this.sendErrorItem = function sendErrorItem(convId, itemId, err) {
         self.buildConversationItem(itemId, 'ERROR', err).then(item => client.addTextItem(convId, item));
     }
@@ -555,7 +575,7 @@ var Robot = function () {
 ipcMain.on("recordingReady", function(sender, params) {
     logger.info(`[TESTER] Recording is ready for transcoding`);
     // Transcode file for google speech transcription
-    transcode(config.ogg_file, config.raw_file).then(function() {
+    transcoder.transcode(config.ogg_file, config.raw_file).then(function() {
         logger.info(`[TESTER] Transcoding complete`);
         if (!socket) {
             logger.warn(`[TESTER] Transcriber is not ready to perform this transcription`);
@@ -584,37 +604,6 @@ function initIpcServer() {
     ipc.server.start();
 }
 
-// /opt/ffmpeg/ffmpeg -acodec opus -i test.raw -f s16le -acodec pcm_s16le -ar 16000 output.raw
-function transcode(fileIn, fileOut) {
-    return new Promise(function(resolve, reject) {
-        if (!fileIn || !fileOut) {
-            throw new Error('You must specify a path for both input and output files.');
-        }
-        if (!fs.existsSync(fileIn)) {
-            throw new Error(`Input file must exist. Input file: ${fileIn}`);
-        }
-        if (mime.lookup(fileIn).indexOf('audio') > -1) {
-            try {
-                ffmpeg()
-                    .input(fileIn)
-                    .outputOptions([
-                        '-f s16le',
-                        '-acodec pcm_s16le',
-                        '-vn',
-                        '-ac 1',
-                        '-ar 16k',
-                        '-map_metadata -1'
-                    ])
-                    .save(fileOut)
-                    .on('end', () => resolve(fileOut));
-            } catch (e) {
-                reject(e);
-            }
-        } else {
-            throw new Error('File must have audio mime.');
-        }   
-    });
-}
 //*********************************************************************
 //* main
 //*********************************************************************
