@@ -1,12 +1,7 @@
 'use strict';
 
 // Electron
-const electron = require('electron');
-const app = electron.app;
-const BrowserWindow = electron.BrowserWindow;
-const { ipcMain } = require('electron');
-const path = require('path');
-const url = require('url');
+const ElectronHelper = require('./electron.js');
 
 // Load configuration
 const config = require('./config.json');
@@ -27,54 +22,6 @@ const transcoder = require('./transcoder.js');
 // Audio Transcribing
 const Transcriber = require('./transcriber.js');
 
-// Setup Electron
-let debug = /--debug/.test(process.argv[2]);
-let win;
-
-function createWindow() {
-    // Create the browser window.
-    win = new BrowserWindow({
-        width: 1200,
-        height: 900,
-        show: !!debug
-    });
-
-    // and load the index.html of the app.
-    win.loadURL(url.format({
-        pathname: path.join(__dirname, 'index.html'),
-        protocol: 'file:',
-        slashes: true
-    }));
-
-    // Open the DevTools in debug mode
-    debug && win.webContents.on('did-frame-finish-load', () => win.webContents.openDevTools());
-
-    // Emitted when the window is closed.
-    win.on('closed', () => win = null);
-}
-
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-app.on('ready', createWindow);
-
-// Quit when all windows are closed.
-app.on('window-all-closed', () => {
-    // On OS X it is common for applications and their menu bar
-    // to stay active until the user quits explicitly with Cmd + Q
-    if (process.platform !== 'darwin') {
-        app.quit()
-    }
-});
-
-app.on('activate', function () {
-    // On OS X it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
-    if (win === null) {
-        createWindow();
-    }
-});
-
 // SDK logger
 var sdkLogger = bunyan.createLogger({
     name: 'sdk',
@@ -88,6 +35,10 @@ var logger = bunyan.createLogger({
     stream: process.stdout,
     level: 'info'
 });
+
+// Setup Electron
+let debug = /--debug/.test(process.argv[2]);
+var electronHelper = new ElectronHelper(logger, debug);
 
 // Node utils
 var util = require('util');
@@ -134,6 +85,7 @@ var Robot = function () {
         logger.info(`[TESTER]: initialize testing bot`);
         return new Promise(function (resolve, reject) {
             transcriber = new Transcriber(logger, self.onTranscriptionReady);
+            electronHelper.setIPCMainOn("recordingReady", robot.onRecordingReady);
             resolve();
         });
     };
@@ -419,7 +371,7 @@ var Robot = function () {
     this.dialBridge = function(convId, itemId, bridge) {
         logger.info(`[TESTER] Dial Bridge with number ${bridge.bridgeNumber} and locale ${bridge.locale}`);
         logger.info(`[TESTER] Keep Testing after this? ${testConfig.keepTesting()}`);
-        win.webContents.send('dialBridge', bridge);
+        electronHelper.send('dialBridge', bridge);
         self.buildConversationItem(itemId, `Dialing Bridge`, `Dialing ${bridge.bridgeNumber}` + ` ${bridge.pin ? bridge.pin : ''}` + ` with locale ${bridge.locale}`)
         .then(item => client.addTextItem(convId || conversation.convId, item));
         lastItemId = itemId;
@@ -601,7 +553,6 @@ var Robot = function () {
 //* main
 //*********************************************************************
 var robot = new Robot();
-ipcMain.on("recordingReady", robot.onRecordingReady);
 robot.initBot()
     .then(robot.logonBot)
     .then(robot.sayHi)
