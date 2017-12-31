@@ -1,3 +1,5 @@
+'use strict';
+
 // String similarity
 var similarity = require('similarity');
 

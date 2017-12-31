@@ -47,8 +47,8 @@ var Transcriber = function () {
     //***************************************
     // Process new file
     //***************************************
-    this.processNewFile = function(filename, stats) {
-        logger.info(`[APP]: process new file`);
+    this.processNewFile = function(filename, locale) {
+        logger.info(`[APP]: process new file with locale ${locale}`);
         return new Promise(function (resolve, reject) {
 
             // Reads a local audio file and converts it to base64
@@ -62,7 +62,7 @@ var Transcriber = function () {
             const config = {
                 encoding: 'LINEAR16',
                 sampleRateHertz: 16000,
-                languageCode: 'en-US',
+                languageCode: locale,
             };
             const request = {
                 audio: audio,
@@ -134,7 +134,7 @@ function initIpcClient() {
                 'audio-file-ready',
                 function(data){
                     ipc.log('got a message from circuittestbot : '.debug, data);
-                    var text= transcriber.processNewFile(data).then(text => {
+                    var text= transcriber.processNewFile(data.file, data.locale).then(text => {
                         logger.info(`Transcribed text: ${text}`);
                         ipc.of.circuittestbot.emit(
                             'transcription-available',

@@ -112,16 +112,21 @@ var client = new Circuit.Client({
 // String similarity
 var Similarity = require('./similarity.js');
 
+// Utils
+var RecUtils = require('./utils.js');
+
 // IPC communication with transcriber process
 const ipc = require('node-ipc');
 var socket;
 var similarity = new Similarity(logger);
+var currentBridge;
 
 var Robot = function () {
     var self = this;
     var conversation = null;
     var commander = new Commander(logger);
     var testConfig = new TestConfig(logger);
+    var recUtils = new RecUtils(logger);
     var user = {};
     var lastItemId;
     var testInterval;
@@ -401,14 +406,14 @@ var Robot = function () {
             .then(item => client.addTextItem(convId || conversation.convId, item));
         } else {
             logger.info(`[TESTER] Sending dial message to renderer`);
-            var bridge = {
+            currentBridge = {
                 bridgeNumber: params[0],
-                locale: (params.length > 2 ? params[2] : 'EN_US')
+                locale: recUtils.normalizeLocale(params.length > 2 ? params[2] : 'EN_US')
             }
             if (params.length > 1) {
-                bridge.pin = params[1];
+                currentBridge.pin = params[1];
             }
-            self.dialBridge(convId, itemId, bridge);
+            self.dialBridge(convId, itemId, currentBridge);
         }
     }
 
@@ -419,6 +424,7 @@ var Robot = function () {
         self.buildConversationItem(itemId, `Dialing Bridge`, `Dialing ${bridge.bridgeNumber}` + ` ${bridge.pin ? bridge.pin : ''}` + ` with locale ${bridge.locale}`)
         .then(item => client.addTextItem(convId || conversation.convId, item));
         lastItemId = itemId;
+        currentBridge = bridge;
 }
 
     //*********************************************************************
@@ -497,7 +503,7 @@ var Robot = function () {
     }
 
     this.getConferenceBridges = function(confDetails) {
-        logger.info(`[TESTER] Get Conference Bridges}`);
+        logger.info(`[TESTER] Get Conference Bridges`);
         return new Promise(function (resolve, reject) {
             var conferenceBridges = [];
             var pin = confDetails.pin;
@@ -511,7 +517,7 @@ var Robot = function () {
                 logger.info(`[TESTER] Locale: ${bridgeNumber.locale}`);
                 conferenceBridges.push({
                     bridgeNumber: bridgeNumber.bridgeNumber,
-                    locale: bridgeNumber.locale,
+                    locale: recUtils.normalizeLocale(bridgeNumber.locale),
                     pin: pin+'#'
                 });
             });
@@ -523,14 +529,11 @@ var Robot = function () {
         logger.info(`[TESTER] Set Conference Bridges for Testing`);
         return new Promise(function(resolve, reject) {
             conferenceBridges.forEach(function(confBridge) {
-                // Only English US bridges for now
-                if (confBridge.locale === 'EN_US') {
-                    testConfig.addBridge({
-                        bridgeNumber: confBridge.bridgeNumber,
-                        locale: confBridge.locale,
-                        pin: confBridge.pin
-                    });
-                }
+                testConfig.addBridge({
+                    bridgeNumber: confBridge.bridgeNumber,
+                    locale: confBridge.locale,
+                    pin: confBridge.pin
+                });
             });
             resolve();
         });
@@ -558,7 +561,7 @@ ipcMain.on("recordingReady", function(sender, params) {
             logger.warn(`[TESTER] Transcriber is not ready to perform this transcription`);
             return;
         }
-        ipc.server.emit(socket, 'audio-file-ready', config.raw_file);
+        ipc.server.emit(socket, 'audio-file-ready', {locale: currentBridge.locale, file: config.raw_file});
     }).catch(e => logger.error(e)); 
 });
 
@@ -573,9 +576,9 @@ function initIpcServer() {
         });
         ipc.server.on('transcription-available', function(message, st) {
             logger.info(`[TESTER]: Transcription Available. ${message}`);
-            var simil = similarity.getSimilarity(message).toFixed(4);
-            robot.buildConversationItem(robot.getLastItemId(), `Transcription Available: similarity= ${simil * 100}%`, `${message}`)
-            .then(item => client.addTextItem(robot.getConvId(), item));
+            similarity.getSimilarityByLocale(message, currentBridge.locale).then(simil =>
+            robot.buildConversationItem(robot.getLastItemId(), `Transcription Available: similarity= ${simil.toFixed(4) * 100}%`, `${message}`)
+            .then(item => client.addTextItem(robot.getConvId(), item)));
         });
     });
     ipc.server.start();
