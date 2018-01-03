@@ -439,27 +439,33 @@ var Robot = function () {
     }
 
     //*********************************************************************
+    //* Test next bridge
+    //*********************************************************************
+    this.testNextBridge = function() {
+        let convId = self.getConvId();
+        let itemId = self.getLastItemId();
+        testConfig.getNextBridge()
+        .then(bridge => self.dialBridge(convId, itemId, bridge))
+        .catch(err => function(err) {
+            self.sendErrorItem(convId, itemId, err);
+        });
+        if (!testInterval && testConfig.keepTesting()) {
+            testInterval = setInterval(self.testNextBridge, testConfig.getConfigurationTimeBetweenTests());
+        }
+        if (testInterval && !testConfig.keepTesting()) {
+            clearInterval(testInterval);
+            testInterval = undefined;
+        }
+    }
+
+    //*********************************************************************
     //* Start conference bridge testing
     //*********************************************************************
     this.startConfTest = function(convId, itemId) {
-        function test() {
-            testConfig.getNextBridge()
-            .then(bridge => self.dialBridge(convId, itemId, bridge))
-            .catch(err => function(err) {
-                self.sendErrorItem(convId, itemId, err);
-            });
-            if (!testInterval && testConfig.keepTesting()) {
-                testInterval = setInterval(test, testConfig.getConfigurationTimeBetweenTests());
-            }
-            if (testInterval && !testConfig.keepTesting()) {
-                clearInterval(testInterval);
-                testInterval = undefined;
-            }
-        }
+        lastItemId = itemId;
         client.changeConversationPin(convId)
         .then(self.getConferenceBridges)
-        .then(self.setConferenceBridgesForTesting)
-        .then(test)
+        .then(self.testNextBridge)
         .catch(err => self.sendErrorItem(convId, itemId, err));
     }
 
@@ -474,32 +480,15 @@ var Robot = function () {
             logger.info(`[TESTER] Conference Details: `);
             logger.info(`[TESTER] Pin: ${pin}`);
             if (confDetails.bridgeNumbers.length === 0) {
-                resolve([]);
+                reject(`There are no conference bridges for this conversation`);
             }
             confDetails.bridgeNumbers.forEach(function (bridgeNumber, i) {
                 logger.info(`[TESTER] Bridge Number: ${bridgeNumber.bridgeNumber}`);
                 logger.info(`[TESTER] Locale: ${bridgeNumber.locale}`);
-                conferenceBridges.push({
+                testConfig.addBridge({
                     bridgeNumber: bridgeNumber.bridgeNumber,
                     locale: recUtils.normalizeLocale(bridgeNumber.locale),
                     pin: pin+'#'
-                });
-            });
-            resolve(conferenceBridges);
-        });
-    }
-
-    //*********************************************************************
-    //* Set conference bridges for testing
-    //*********************************************************************
-    this.setConferenceBridgesForTesting = function(conferenceBridges) {
-        logger.info(`[TESTER] Set Conference Bridges for Testing`);
-        return new Promise(function(resolve, reject) {
-            conferenceBridges.forEach(function(confBridge) {
-                testConfig.addBridge({
-                    bridgeNumber: confBridge.bridgeNumber,
-                    locale: confBridge.locale,
-                    pin: confBridge.pin
                 });
             });
             resolve();
@@ -514,6 +503,15 @@ var Robot = function () {
         testInterval = undefined;
         self.buildConversationItem(itemId, 'TESTING', 'Test will stop after current test is finished')
         .then(item => client.addTextItem(convId, item));
+    }
+
+    //*********************************************************************
+    //* Resume conference bridge testing
+    //*********************************************************************
+    this.resumeConfTest = function(convId, itemId) {
+        if (!testInterval) {
+            self.testNextBridge();
+        }
     }
 
     //*********************************************************************

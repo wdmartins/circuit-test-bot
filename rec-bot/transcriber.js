@@ -31,7 +31,6 @@ var Transcriber = function (log, onTranscriptionReadyCB) {
             onTranscriptionReady(null, `ERROR: Transcriber process is not ready`);
             return;
         }
-        //logger.info(`[DEBUG] ===== Transcribe file ${audioFileData.file} with locale ${audioFileData.locale}`);
         ipc.server.emit(socket, 'audio-file-ready', {locale: audioFileData.locale, file: audioFileData.file});
     }
 
