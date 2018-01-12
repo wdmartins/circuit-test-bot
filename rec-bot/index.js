@@ -84,6 +84,7 @@ var Robot = function () {
         return new Promise(function (resolve, reject) {
             transcriber = new Transcriber(logger, self.onTranscriptionReady);
             electronHelper.setIPCMainOn("recordingReady", robot.onRecordingReady);
+            electronHelper.setIPCMainOn("callFailed", robot.onCallFailed);
             resolve();
         });
     };
@@ -524,13 +525,24 @@ var Robot = function () {
     //*********************************************************************
     //* onRecordingReady
     //*********************************************************************
-    this.onRecordingReady = function () {
+    this.onRecordingReady = function (sender, brdige) {
         logger.info(`[TESTER] Recording is ready for transcoding`);
         // Transcode file for google speech transcription
         transcoder.transcode(config.ogg_file, config.raw_file).then(function() {
             logger.info(`[TESTER] Transcoding complete`);
             transcriber.transcribe({locale: currentBridge.locale, file: config.raw_file});
         }).catch(e => logger.error(e)); 
+    }
+
+    //*********************************************************************
+    //* onCallFailed
+    //*********************************************************************
+    this.onCallFailed = function (sender, bridge) {
+        logger.error(`[TESTER] Call to ${bridge.bridgeNumber} failed`);
+        self.buildConversationItem(self.getLastItemId(), `Call Failed`, `Call to ${bridge.bridgeNumber} failed. Test is stop`)
+        .then(item => client.addTextItem(self.getConvId(), item));
+        clearInterval(testInterval);
+        testInterval = undefined;
     }
 
     //*********************************************************************

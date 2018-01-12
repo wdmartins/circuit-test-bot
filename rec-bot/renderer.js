@@ -14,6 +14,7 @@ var recordingOptions = {
 };
 var audioElement;
 var bridge;
+var callFailedSent = false;
 // Create circuit SDK client instance
 const client = new Circuit.Client(config.bot);
 
@@ -28,6 +29,7 @@ ipcRenderer.on("dialBridge", function(sender, confBridge) {
         console.log(`[RENDERER] Error: mimeType ${recordingOptions.mimeType} is not supported`);
     }
     recordedBlobs = [];
+    callFailedSent = false;
     client.dialNumber(bridge.bridgeNumber, null, {audio: true, video: false})
     .then(c => call = c)
     .catch(error => console.error(`[RENDERER] Error dialing number. Error: ${error}`));
@@ -85,7 +87,9 @@ function endCall() {
 }
 
 function stopRecording() {
-    console.log(`[RENDERER] Stoping recorder. BitsPerSecond: ${mediaRecorder.audioBitsPerSecond}`);
+    if (mediaRecorder) {
+        console.log(`[RENDERER] Stoping recorder. BitsPerSecond: ${mediaRecorder.audioBitsPerSecond}`);
+    }
     mediaRecorder && mediaRecorder.stop();
 }
 
@@ -100,6 +104,12 @@ function processEvent(evt) {
                 setupCall(call);
                 startRecording();
                 setTimeout(sendPin, FIRST_PROMPT_RECORDING_TIME);
+            } else  if (evt.call.state === 'Failed') {
+                if (!callFailedSent) {
+                    console.log(`[RENDERER] Call has failed`);
+                    ipcRenderer.send('callFailed', bridge);
+                    callFailedSent = true;
+                }
             } else {
                 console.log(`[RENDERER] - ${evt.reason} - ${evt.call.state} - ${mediaRecorder}`);
             }
